@@ -39,13 +39,30 @@ SEED = 7
 DEPTH_MAX = 0.235             # max body depth
 DEPTH_AT = 0.34               # where the body is deepest
 DORSAL_H = 0.20               # tall, upright dorsal fin of an adult male
-FLUKE_SPAN = 0.17             # half-span of the flukes
-CAM_ELEV = math.radians(20)   # camera slightly above: flukes read as a shape
+TAIL_TAPER = 1.25             # how fast the body narrows behind DEPTH_AT
+PEDUNCLE_D = 0.055            # floor on the tail-stock depth: stays solid into the flukes
+PEDUNCLE_EASE = 0.03          # how softly the taper settles onto PEDUNCLE_D
+CAM_ELEV = math.radians(26)   # camera slightly above: flukes read as a shape
 BEATS_PER_LOOP = 2
 TAIL_AMP = 0.055
 
+# Flukes (top-view planform, offsets along the chord measured from FLUKE_ROOT)
+FLUKE_SPAN = 0.26             # half-span; foreshortened on screen by sin(CAM_ELEV)
+FLUKE_ROOT = 0.955            # where the flukes hang off the spine
+FLUKE_LEAD0 = -0.035          # leading edge at the midline (overlaps the peduncle)
+FLUKE_TIP = 0.17              # how far back the pointed tips sit (leading-edge sweep)
+FLUKE_NOTCH = 0.060           # trailing edge at the midline: the median notch
+FLUKE_LEAD_CURVE = 2.2        # >1: leading edge leaves the peduncle square, then sweeps back
+FLUKE_TRAIL_CURVE = 0.7       # <1: trailing edge folds into a sharp cusp at the notch
+FLUKE_FOLLOW = 0.80           # fluke pitch = atan(spine slope) * this
+FLUKE_NEAR_SHADE = 0.66       # near lobe (below, in front of the body)
+FLUKE_FAR_SHADE = 0.44        # far lobe (above, behind the body) reads a little darker
+FLUKE_RIM = 0.22              # extra light on the near lobe's leading edge
+
 # Haze
 EDGE_DITHER = 0.85            # >0 breaks up partially covered edge cells
+TAIL_DITHER = 0.30            # gentler dither from the peduncle on, so the tail stays solid
+TAIL_DITHER_S = (0.79, 0.87)  # ramp from EDGE_DITHER to TAIL_DITHER over this range of s
 SCRAMBLE = 0.025              # fraction of body glyphs that flicker per frame
 HALO = 0.10                   # chance of a faint glyph next to the body
 
@@ -62,8 +79,13 @@ def depth(s):
     s = np.asarray(s, dtype=float)
     head = np.sqrt(np.clip(1 - (1 - s / DEPTH_AT) ** 2, 0, 1))
     u = np.clip((s - DEPTH_AT) / (1 - DEPTH_AT), 0, 1)
-    tail = np.cos(u * np.pi / 2) ** 1.25
-    d = np.where(s < DEPTH_AT, head, tail) * DEPTH_MAX
+    tail = np.cos(u * np.pi / 2) ** TAIL_TAPER * DEPTH_MAX
+    # soft floor: the tail stock eases into PEDUNCLE_D instead of pinching off
+    # (polynomial smooth max: identical to the plain taper once it is more than
+    # PEDUNCLE_EASE above the floor, so the rest of the body is untouched)
+    gap = np.maximum(PEDUNCLE_EASE - np.abs(tail - PEDUNCLE_D), 0)
+    tail = np.maximum(tail, PEDUNCLE_D) + gap ** 2 / (4 * PEDUNCLE_EASE)
+    d = np.where(s < DEPTH_AT, head * DEPTH_MAX, tail)
     return np.maximum(d, 0.032 * (s > 0.02))
 
 
@@ -213,23 +235,30 @@ def pectoral_samples(t) -> Samples:
 
 
 def fluke_samples(t) -> Samples:
-    root_s = 0.955
-    pos, n = frame_of(np.array([root_s]), t)
-    _, slope = spine(np.array([root_s]), t)
-    ang = math.atan(slope[0]) * 1.25            # flukes lag/overshoot the spine
+    pos, _ = frame_of(np.array([FLUKE_ROOT]), t)
+    _, slope = spine(np.array([FLUKE_ROOT]), t)
+    ang = math.atan(slope[0]) * FLUKE_FOLLOW     # flukes lag/overshoot the spine
     tdir = np.array([math.cos(ang), math.sin(ang)])
-    up = np.array([-tdir[1], tdir[0]])
-    z = np.linspace(-FLUKE_SPAN, FLUKE_SPAN, 260)
-    c = np.linspace(0, 1, 140)
+    z = np.linspace(-FLUKE_SPAN, FLUKE_SPAN, 320)
+    c = np.linspace(0, 1, 160)
     Z, C = np.meshgrid(z, c, indexing="ij")
     az = np.abs(Z) / FLUKE_SPAN
-    lead = -0.04 + 0.11 * az ** 1.15                    # swept-back leading edge
-    chord = (0.09 * (1 - az ** 2.2) + 0.012) * np.where(az < 0.08, 0.7 + 3.7 * az, 1)  # notch
+    # planform seen from above: the leading edge leaves the peduncle almost
+    # square, then sweeps back into a pointed tip; the trailing edge runs from
+    # the tip forward to a deep median notch
+    lead = FLUKE_LEAD0 + (FLUKE_TIP - FLUKE_LEAD0) * az ** FLUKE_LEAD_CURVE
+    trail = FLUKE_NOTCH + (FLUKE_TIP - FLUKE_NOTCH) * az ** FLUKE_TRAIL_CURVE
+    chord = trail - lead
     along = lead + C * chord
     across = Z * math.sin(CAM_ELEV)                      # foreshortened span
-    P = pos[0] + along[..., None] * tdir + across[..., None] * up
+    # flukes pitch about their span axis: only the chord turns with the spine,
+    # the span stays vertical on screen, so the lobes do not shear when they beat
+    P = pos[0] + along[..., None] * tdir + across[..., None] * np.array([0.0, 1.0])
     far = Z > 0
-    shade = np.where(far, 0.55, 0.25) + 0.25 * (1 - C)
+    # leading edge catches the light (a bright rim on the near lobe separates
+    # it from the peduncle); tips and the far lobe sit darker
+    shade = np.where(far, FLUKE_FAR_SHADE, FLUKE_NEAR_SHADE) + 0.22 * (1 - C) - 0.10 * az
+    shade = shade + np.where(far, 0.0, FLUKE_RIM * np.exp(-(C / 0.25) ** 2))
     layer = np.where(far, 0, 2)
     return Samples(P[..., 0].ravel(), P[..., 1].ravel(), np.full(Z.size, BLACK),
                    np.clip(shade, 0, 1).ravel(), layer.ravel())
@@ -301,6 +330,10 @@ def glyphs(mat, shade, cov, t, fi):
     """return grid of (char, style) or None."""
     r = np.random.default_rng(SEED * 1000 + fi)
     out = [[None] * COLS for _ in range(ROWS)]
+    # body position s of each column; dither eases off toward the tail
+    s_col = ((np.arange(COLS) + 0.5) * SS - OX) / SCALE
+    ramp = np.clip((s_col - TAIL_DITHER_S[0]) / (TAIL_DITHER_S[1] - TAIL_DITHER_S[0]), 0, 1)
+    dither = EDGE_DITHER + (TAIL_DITHER - EDGE_DITHER) * ramp
     for yy in range(ROWS):
         for xx in range(COLS):
             m = mat[yy, xx]
@@ -308,7 +341,7 @@ def glyphs(mat, shade, cov, t, fi):
             if m == EMPTY:
                 continue
             h = cell_hash(xx, yy)
-            thr = BAYER[yy % 4, xx % 4] * EDGE_DITHER
+            thr = BAYER[yy % 4, xx % 4] * dither[xx]
             if c < 0.999 and c < thr + 0.10:
                 # dissolving edge: sparse light glyph or nothing
                 if r.random() < 0.6:
@@ -470,14 +503,29 @@ def to_txt(g):
     return "\n".join("".join(c[0] if c else " " for c in row).rstrip() for row in g) + "\n"
 
 
+PREVIEW_FONTS = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "/Library/Fonts/DejaVuSansMono.ttf",
+    "/System/Library/Fonts/Menlo.ttc",
+]
+
+
+def preview_font(size):
+    from PIL import ImageFont
+    for path in PREVIEW_FONTS:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default()
+
+
 def preview_png(g, theme, path, scale=1.0):
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
     th = THEMES[theme]
     bg = (13, 17, 23) if theme == "dark" else (255, 255, 255)
     cw, chh = int(CW * scale), int(CH * scale)
     img = Image.new("RGB", (COLS * cw, ROWS * chh), bg)
     d = ImageDraw.Draw(img)
-    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", int(chh * 0.82))
+    font = preview_font(int(chh * 0.82))
     for yy, row in enumerate(g):
         for xx, cell in enumerate(row):
             if cell:
@@ -495,11 +543,17 @@ def main():
             fh.write(to_svg(frames, theme))
     with open(os.path.join(root, "assets", "orca.txt"), "w") as fh:
         fh.write(to_txt(frames[0]))
-    if "--no-preview" not in sys.argv:
+    want_preview = "--no-preview" not in sys.argv
+    if want_preview:
+        try:
+            import PIL  # noqa: F401  (previews only)
+        except ImportError:
+            print("Pillow not installed: skipping preview/")
+            want_preview = False
+    if want_preview:
         pv = os.path.join(root, "preview")
         os.makedirs(pv, exist_ok=True)
-        for theme in THEMES:
-            preview_png(frames[0], theme, os.path.join(pv, f"frame0-{theme}.png"))
+        preview_png(frames[0], "light", os.path.join(pv, "still-light.png"))
         imgs = [preview_png(f, "dark", None) for f in frames]
         imgs[0].save(os.path.join(pv, "orca-dark.gif"), save_all=True, append_images=imgs[1:],
                      duration=int(LOOP_SECONDS * 1000 / FRAMES), loop=0)
