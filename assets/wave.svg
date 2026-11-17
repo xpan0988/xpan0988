@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 40" width="800" height="40" role="img" aria-label="Sea waves">
-  <title>Sea waves</title>
-  <!-- A mid-tone sea blue that reads on both GitHub's light and dark backgrounds. -->
-  <g fill="none" stroke="#4189c6" stroke-linecap="round">
-    <path d="M0,14 C33,8 67,20 100,14 S167,8 200,14 S267,20 300,14 S367,8 400,14 S467,20 500,14 S567,8 600,14 S667,20 700,14 S767,8 800,14" stroke-width="2"/>
-    <path d="M30,25 C63,20 97,30 130,25 S197,20 230,25 M290,25 C323,20 357,30 390,25 S457,20 490,25 M550,25 C583,20 617,30 650,25 S717,20 750,25" stroke-width="1.5" opacity="0.5"/>
-    <path d="M120,34 C150,31 180,37 210,34 M380,34 C410,31 440,37 470,34 M620,34 C650,31 680,37 710,34" stroke-width="1.2" opacity="0.25"/>
-  </g>
-</svg>
