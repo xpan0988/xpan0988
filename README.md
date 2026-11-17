@@ -1,39 +1,24 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/orca-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/orca.svg">
-    <img src="assets/orca.svg" width="640" alt="An adult male orca leaping from the sea">
-  </picture>
-</p>
+<div align="center">
 
-<h1 align="center">xpan0988</h1>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/orca-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="assets/orca-light.svg">
+  <img alt="An adult orca drawn in ASCII characters, beating its flukes" src="assets/orca-light.svg" width="900">
+</picture>
 
-<p align="center">Undergrad · indie developer · building things I actually want to use</p>
+### Hi, I'm Pan
 
-## About me
+Undergrad · indie developer · building things I actually want to use
 
-- Undergraduate student <!-- school / major -->
-- Most of my time goes into indie projects: small, focused tools I use myself
-- Currently writing a position paper <!-- topic -->
+</div>
 
-## Featured projects
+**Now** — working on [Pastey](https://github.com/xpan0988/Pastey) and [clawd-bot](https://github.com/xpan0988/clawd-bot), and writing a position paper.
 
-| Project | Description |
-| --- | --- |
-| [Pastey](https://github.com/xpan0988/Pastey) | <!-- one-line description --> |
-| [clawd-bot](https://github.com/xpan0988/clawd-bot) | <!-- one-line description --> |
+| Project | |
+|---|---|
+| [Pastey](https://github.com/xpan0988/Pastey) | <!-- one line --> |
+| [clawd-bot](https://github.com/xpan0988/clawd-bot) | <!-- one line --> |
 
-## Tech stack
+<!-- Website · Email -->
 
-- **Languages:** <!-- e.g. TypeScript, Python -->
-- **Frameworks:** <!-- ... -->
-- **Tools:** <!-- ... -->
-
-## Contact
-
-- Email: <!-- you@example.com -->
-- Website: <!-- https://example.com -->
-
-<p align="center">
-  <img src="assets/wave.svg" width="100%" alt="">
-</p>
+<sub>The orca is generated from math, not drawn: a depth profile along an undulating spine, rasterised into glyphs frame by frame (`scripts/build_orca.py`). Idea from [dsh-ascii-sharks](https://github.com/OGHong/dsh-ascii-sharks).</sub>
