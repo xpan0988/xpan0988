@@ -63,8 +63,10 @@ FLUKE_RIM = 0.22              # extra light on the near lobe's leading edge
 EDGE_DITHER = 0.85            # >0 breaks up partially covered edge cells
 TAIL_DITHER = 0.30            # gentler dither from the peduncle on, so the tail stays solid
 TAIL_DITHER_S = (0.79, 0.87)  # ramp from EDGE_DITHER to TAIL_DITHER over this range of s
-SCRAMBLE = 0.025              # fraction of body glyphs that flicker per frame
-HALO = 0.10                   # chance of a faint glyph next to the body
+EDGE_GLYPH = 0.6              # share of dissolving edge cells that get a faint glyph
+HALO = 0.10                   # share of cells next to the body that get a faint dot
+                              # (both picked by a fixed per-cell hash: no per-frame noise)
+FRAME_OVERLAP_MS = 0.002      # frames hand over with this overlap: never a blank instant
 
 rng = np.random.default_rng(SEED)
 
@@ -316,7 +318,6 @@ BAYER = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]])
 BODY = "#%&@$8BWMNQ#%&@$"
 SKIN = "#%*&+@=$x8?"
 LIGHT_SET = ".:'`,-"
-SCRAMBLE_SET = "!?/\\|<>{}[]^~01ORCA"
 STYLES = ["b0", "b1", "b2", "b3", "w0", "w1", "g0", "e0", "h0", "p0", "p1", "f0"]
 
 
@@ -326,9 +327,16 @@ def cell_hash(x, y, k=0):
     return h ^ (h >> 16)
 
 
-def glyphs(mat, shade, cov, t, fi):
-    """return grid of (char, style) or None."""
-    r = np.random.default_rng(SEED * 1000 + fi)
+def hash01(x, y, k):
+    return cell_hash(x, y, k) / 0xFFFFFFFF
+
+
+def glyphs(mat, shade, cov):
+    """return grid of (char, style) or None.
+
+    Every choice is a fixed function of the cell, never of the frame: a cell
+    only changes when the geometry under it changes, so the texture holds
+    still and all motion comes from the model."""
     out = [[None] * COLS for _ in range(ROWS)]
     # body position s of each column; dither eases off toward the tail
     s_col = ((np.arange(COLS) + 0.5) * SS - OX) / SCALE
@@ -344,7 +352,7 @@ def glyphs(mat, shade, cov, t, fi):
             thr = BAYER[yy % 4, xx % 4] * dither[xx]
             if c < 0.999 and c < thr + 0.10:
                 # dissolving edge: sparse light glyph or nothing
-                if r.random() < 0.6:
+                if hash01(xx, yy, 1) < EDGE_GLYPH:
                     out[yy][xx] = (LIGHT_SET[h % len(LIGHT_SET)], "h0")
                 continue
             s = shade[yy, xx]
@@ -359,8 +367,6 @@ def glyphs(mat, shade, cov, t, fi):
                 cell = (BODY[h % len(BODY)], "w1" if s > 0.4 else "w0")
             else:
                 cell = (SKIN[h % len(SKIN)], "g0")
-            if r.random() < SCRAMBLE:
-                cell = (SCRAMBLE_SET[r.integers(len(SCRAMBLE_SET))], cell[1])
             out[yy][xx] = cell
     # faint halo
     body = mat != EMPTY
@@ -369,7 +375,7 @@ def glyphs(mat, shade, cov, t, fi):
         for dx in (-2, -1, 0, 1, 2):
             near |= np.roll(np.roll(body, dy, 0), dx, 1)
     for yy, xx in zip(*np.nonzero(near & ~body)):
-        if out[yy][xx] is None and r.random() < HALO:
+        if out[yy][xx] is None and hash01(xx, yy, 2) < HALO:
             out[yy][xx] = (".", "h0")
     return out
 
@@ -427,7 +433,7 @@ def build_frames():
     for fi in range(FRAMES):
         t = fi / FRAMES
         mat, shade, cov = rasterise(t)
-        g = glyphs(mat, shade, cov, t, fi)
+        g = glyphs(mat, shade, cov)
         frames.append(ambient(g, t))
     return frames
 
@@ -462,8 +468,13 @@ def to_svg(frames, theme):
     css = [
         "text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono',monospace;"
         f"font-size:{CH * 0.82:.1f}px;white-space:pre}}",
-        ".f{opacity:0;animation:k %.2fs steps(1,end) infinite}.fr0{opacity:1}" % dur,
-        "@keyframes k{0%%{opacity:1}%.4f%%{opacity:0}100%%{opacity:0}}" % (100 / n),
+        ".f{opacity:0;animation:k %.6fs steps(1,end) infinite}.fr0{opacity:1}" % dur,
+        # each frame owns exactly 1/n of the loop plus a hair of overlap, so the
+        # hand-over never leaves a frame-less (blank) instant. Windows are
+        # shifted early (see the delays below) so that at t=0, where browsers
+        # hold animations while they start up, frame 0 is the only one showing.
+        "@keyframes k{0%%{opacity:1}%.6f%%{opacity:0}100%%{opacity:0}}"
+        % (100 / n + 100 * FRAME_OVERLAP_MS / (dur * 1000)),
         "@media (prefers-reduced-motion:reduce){.f{animation:none}}",
     ]
     for st in STYLES:
@@ -473,7 +484,10 @@ def to_svg(frames, theme):
            "<style>" + "".join(css) + "</style>"]
     for fi, g in enumerate(frames):
         cls = "f fr0" if fi == 0 else "f"
-        out.append(f'<g class="{cls}" style="animation-delay:{fi * dur / n - dur:.3f}s">')
+        # window of frame fi: [fi*slot - 2e, (fi+1)*slot - e): neighbours overlap
+        # by e and no window edge lands exactly on a slot boundary (or t=0)
+        delay = fi * dur / n - dur - 2 * FRAME_OVERLAP_MS / 1000
+        out.append(f'<g class="{cls}" style="animation-delay:{delay:.7f}s">')
         for yy, row in enumerate(g):
             # contiguous same-style glyphs become one <text>; textLength pins
             # the run to the grid so columns line up in any monospace font
