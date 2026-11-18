@@ -6,19 +6,14 @@
   <img alt="An adult orca drawn in ASCII characters, beating its flukes" src="assets/orca-light.svg" width="900">
 </picture>
 
-### Hi, I'm Pan
-
-Undergrad · indie developer · building things I actually want to use
-
 </div>
 
-**Now** — working on [Pastey](https://github.com/xpan0988/Pastey) and [clawd-bot](https://github.com/xpan0988/clawd-bot), and writing a position paper.
+Advanced Computing undergraduate at the University of Sydney. An independent developer driven by curiosity.
 
-| Project | |
-|---|---|
-| [Pastey](https://github.com/xpan0988/Pastey) | <!-- one line --> |
-| [clawd-bot](https://github.com/xpan0988/clawd-bot) | <!-- one line --> |
+I'm interested in intelligence, algorithms, and the systems that connect them. I enjoy questioning assumptions and exploring unconventional ideas — usually by building something to see whether it actually works.
 
-<!-- Website · Email -->
+Beyond code: mathematics, music, and strategy games.
 
-<sub>The orca is generated from math, not drawn: a depth profile along an undulating spine, rasterised into glyphs frame by frame (`scripts/build_orca.py`). Idea from [dsh-ascii-sharks](https://github.com/OGHong/dsh-ascii-sharks).</sub>
+*I build things I wish existed.*
+
+<sub>Orca generated with [`scripts/build_orca.py`](scripts/build_orca.py), inspired by [dsh-ascii-sharks](https://github.com/OGHong/dsh-ascii-sharks).</sub>
